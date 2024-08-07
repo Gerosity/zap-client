@@ -186,13 +186,15 @@ struct Player {
             DistanceToLocalPlayer = Myself->LocalOrigin.Distance(LocalOrigin);
             Distance2DToLocalPlayer = Myself->LocalOrigin.To2D().Distance(LocalOrigin.To2D());
         }
-
+        
+        AbsoluteVelocity = Memory::Read<Vector3D>(BasePointer + OFF_ABSVELOCITY);
+        
         // Update Once Per Tick - hir0xygen
         // Reading Most Of The Info Above Every Tick Caused Errors Such As Wrong Weapon IDs And ESP To Be Drawn Wrong
         // If You Only Use Glow (And Maybe Aimbot, Haven't Tested), You May Be Able To Move Info Above To Below To Increase Performance
         if (const auto Now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()); Now >= LastRead + std::chrono::milliseconds(50)) {
             LastRead = Now;
-            AbsoluteVelocity = Memory::Read<Vector3D>(BasePointer + OFF_ABSVELOCITY);
+            
             ViewAngles = Memory::Read<Vector2D>(BasePointer + OFF_VIEW_ANGLES);
             ViewYaw = Memory::Read<float>(BasePointer + OFF_YAW);
             if (Myself->IsValid()) {
