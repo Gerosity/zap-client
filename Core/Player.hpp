@@ -78,8 +78,6 @@ struct Player {
     float aimbotScore;
     FloatVector2D aimbotDesiredAnglesSmoothedNoRecoil;
 
-    std::chrono::milliseconds LastRead;
-
     Player(int PlayerIndex, LocalPlayer* Me) {
         this->Index = PlayerIndex;
         this->Myself = Me;
@@ -141,8 +139,19 @@ struct Player {
         aimbotDesiredAnglesSmoothedNoRecoil = {};
     }
 
-    void Read() {
-        BasePointer = Memory::Read<long>(OFF_REGION + OFF_ENTITY_LIST + ((Index + 1) << 5));
+    void ShortRead() {
+        BasePointer = Memory::Read<long>(OFF_REGION + OFF_ENTITY_LIST + (Index + 1 << 5));
+        if (BasePointer == 0)
+            return;
+
+        LocalOrigin = Memory::Read<Vector3D>(BasePointer + OFF_LOCAL_ORIGIN);
+        AbsoluteVelocity = Memory::Read<Vector3D>(BasePointer + OFF_ABSVELOCITY);
+        ViewAngles = Memory::Read<Vector2D>(BasePointer + OFF_VIEW_ANGLES);
+        ViewYaw = Memory::Read<float>(BasePointer + OFF_YAW);
+    }
+
+    void FullRead() {
+        BasePointer = Memory::Read<long>(OFF_REGION + OFF_ENTITY_LIST + (Index + 1 << 5));
         if (BasePointer == 0)
             return;
 
@@ -151,17 +160,17 @@ struct Player {
 
         if (!IsPlayer() && !IsDummy()) { BasePointer = 0; return; }
 
-        IsDead = (IsDummy()) ? false : Memory::Read<short>(BasePointer + OFF_LIFE_STATE) > 0;
-        IsKnocked = (IsDummy()) ? false : Memory::Read<short>(BasePointer + OFF_BLEEDOUT_STATE) > 0;
+        IsDead = !IsDummy() && Memory::Read<short>(BasePointer + OFF_LIFE_STATE) > 0;
+        IsKnocked = !IsDummy() && Memory::Read<short>(BasePointer + OFF_BLEEDOUT_STATE) > 0;
 
         LocalOrigin = Memory::Read<Vector3D>(BasePointer + OFF_LOCAL_ORIGIN);
 
         LastTimeAimedAt = Memory::Read<int>(BasePointer + OFF_LAST_AIMEDAT_TIME);
         IsAimedAt = LastTimeAimedAtPrevious < LastTimeAimedAt;
         LastTimeAimedAtPrevious = LastTimeAimedAt;
-        float WorldTime = Memory::Read<float>(Myself->BasePointer + OFF_TIME_BASE);
-        float Time1 = Memory::Read<float>(BasePointer + OFF_LAST_VISIBLE_TIME);
-        IsVisible = (Time1 + 0.2) >= WorldTime || IsAimedAt;
+        const auto WorldTime = Memory::Read<float>(Myself->BasePointer + OFF_TIME_BASE);
+        const auto Time1 = Memory::Read<float>(BasePointer + OFF_LAST_VISIBLE_TIME);
+        IsVisible = Time1 + 0.2 >= WorldTime || IsAimedAt;
 
         Health = Memory::Read<int>(BasePointer + OFF_HEALTH);
         MaxHealth = Memory::Read<int>(BasePointer + OFF_MAXHEALTH);
@@ -169,12 +178,12 @@ struct Player {
         MaxShield = Memory::Read<int>(BasePointer + OFF_MAXSHIELD);
 
         if (!IsDead && !IsKnocked && IsHostile) {
-            long WeaponHandle = Memory::Read<long>(BasePointer + OFF_WEAPON_HANDLE);
-            long WeaponHandleMasked = WeaponHandle & 0xffff;
+            const auto WeaponHandle = Memory::Read<long>(BasePointer + OFF_WEAPON_HANDLE);
+            const long WeaponHandleMasked = WeaponHandle & 0xffff;
             WeaponEntity = Memory::Read<long>(OFF_REGION + OFF_ENTITY_LIST + (WeaponHandleMasked << 5));
 
-            int OffHandWeaponID = Memory::Read<int>(BasePointer + OFF_OFFHAND_WEAPON);
-            IsHoldingGrenade = OffHandWeaponID == -251 ? true : false;
+            const auto OffHandWeaponID = Memory::Read<int>(BasePointer + OFF_OFFHAND_WEAPON);
+            IsHoldingGrenade = OffHandWeaponID == -251;
 
             WeaponIndex = Memory::Read<int>(WeaponEntity + OFF_WEAPON_INDEX);
         }
@@ -187,29 +196,22 @@ struct Player {
             Distance2DToLocalPlayer = Myself->LocalOrigin.To2D().Distance(LocalOrigin.To2D());
         }
 
-        // Update Once Per Tick - hir0xygen
-        // Reading Most Of The Info Above Every Tick Caused Errors Such As Wrong Weapon IDs And ESP To Be Drawn Wrong
-        // If You Only Use Glow (And Maybe Aimbot, Haven't Tested), You May Be Able To Move Info Above To Below To Increase Performance
-        if (const auto Now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()); Now >= LastRead + std::chrono::milliseconds(50)) {
-            LastRead = Now;
-            AbsoluteVelocity = Memory::Read<Vector3D>(BasePointer + OFF_ABSVELOCITY);
-            ViewAngles = Memory::Read<Vector2D>(BasePointer + OFF_VIEW_ANGLES);
-            ViewYaw = Memory::Read<float>(BasePointer + OFF_YAW);
-            if (Myself->IsValid()) {
-                if (IsVisible) { // For AimbotMode Grinder
-                    aimbotDesiredAngles = calcDesiredAngles();
-                    aimbotDesiredAnglesIncrement = calcDesiredAnglesIncrement();
-                    aimbotScore = calcAimbotScore();
-                }
-            }
+        AbsoluteVelocity = Memory::Read<Vector3D>(BasePointer + OFF_ABSVELOCITY);
+        ViewAngles = Memory::Read<Vector2D>(BasePointer + OFF_VIEW_ANGLES);
+        ViewYaw = Memory::Read<float>(BasePointer + OFF_YAW);
 
-            // For AimbotMode Grinder
-            localOrigin = Memory::Read<FloatVector3D>(BasePointer + OFF_LOCAL_ORIGIN);
-            absoluteVelocity = Memory::Read<FloatVector3D>(BasePointer + OFF_ABSVELOCITY);
-            FloatVector3D localOrigin_diff = localOrigin.subtract(localOrigin_prev).normalize().multiply(20);
-            localOrigin_predicted = localOrigin.add(localOrigin_diff);
-            localOrigin_prev = FloatVector3D(localOrigin.x, localOrigin.y, localOrigin.z);
+        if (Myself->IsValid() && IsVisible) {
+            aimbotDesiredAngles = calcDesiredAngles();
+            aimbotDesiredAnglesIncrement = calcDesiredAnglesIncrement();
+            aimbotScore = calcAimbotScore();
         }
+
+        // For AimbotMode Grinder
+        localOrigin = Memory::Read<FloatVector3D>(BasePointer + OFF_LOCAL_ORIGIN);
+        absoluteVelocity = Memory::Read<FloatVector3D>(BasePointer + OFF_ABSVELOCITY);
+        FloatVector3D localOrigin_diff = localOrigin.subtract(localOrigin_prev).normalize().multiply(20);
+        localOrigin_predicted = localOrigin.add(localOrigin_diff);
+        localOrigin_prev = FloatVector3D(localOrigin.x, localOrigin.y, localOrigin.z);
     }
 
     bool IsSpectating() {

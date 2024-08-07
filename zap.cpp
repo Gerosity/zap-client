@@ -74,6 +74,8 @@ ConfigManager* Configs = new ConfigManager(Legit, Rage, Flick, Trigger, GlowESP,
 
 // Booleans and Variables
 bool IsMenuOpened = true;
+std::chrono::milliseconds LastRead;
+std::chrono::milliseconds LastReset;
 
 // Thread
 std::atomic_bool StopThread(false);
@@ -303,7 +305,7 @@ void RenderUI() {
 // Core
 bool UpdateCore() {
     try {
-      // Map Checking //
+        // Map Checking //
         Map->Read();
         if (!Map->IsPlayable) {
             return true;
@@ -315,30 +317,23 @@ bool UpdateCore() {
             return true;
         }
 
-        // Populate Players //
-        /*Players->clear();
-        if (Map->IsFiringRange) {
-            for (int i = 0; i < Dummies->size(); i++) {
-                Player* p = Dummies->at(i);
-                p->Read();
+        const auto Now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch());
+        if (Now >= LastReset + std::chrono::milliseconds(5000)) { // update entire entity list (10k in practice range) every 5s
+            Players->clear();
+            LastReset = LastRead = Now;
+            for (auto p: Map->IsFiringRange ? *Dummies : *HumanPlayers) {
+                p->FullRead();
                 if (p->BasePointer != 0 && (p->IsPlayer() || p->IsDummy()))
                     Players->push_back(p);
             }
-        }
-        else {
-            for (int i = 0; i < HumanPlayers->size(); i++) {
-                Player* p = HumanPlayers->at(i);
-                p->Read();
-                if (p->BasePointer != 0 && (p->IsPlayer() || p->IsDummy()))
-                    Players->push_back(p);
+        } else if (Now >= LastRead + std::chrono::milliseconds(50)) { // update known players every tick
+            LastRead = Now;
+            for (const auto p : *Players)
+                p->FullRead();
+        } else { // update *some* things constantly to keep ESP & aimbot smooth
+            for (const auto p : *Players) { // update important data about known players constantly
+                p->ShortRead();
             }
-        }*/
-
-        Players->clear();
-        for (auto p : Map->IsFiringRange ? *Dummies : *HumanPlayers) {
-            p->Read();
-            if (p->BasePointer != 0 && (p->IsPlayer() || p->IsDummy()))
-                Players->push_back(p);
         }
 
         // Updates //
