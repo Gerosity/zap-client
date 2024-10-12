@@ -182,6 +182,10 @@ Instructions are down below
 **Update - Version 1.1.0:**
 
 [![Update - Version 1.1.0](https://img.youtube.com/vi/YyiQNBgrV1Q/0.jpg)](https://www.youtube.com/watch?v=YyiQNBgrV1Q)
+
+**Semirage - Showcase:**
+
+[![Semirage - Showcase](https://img.youtube.com/vi/54ov7SLJ1P8/0.jpg)](https://www.youtube.com/watch?v=54ov7SLJ1P8)
 </details>
 
 # Other Repositories:
